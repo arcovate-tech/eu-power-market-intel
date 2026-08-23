@@ -7,6 +7,9 @@ import numpy as np
 import json
 import subprocess
 import sys
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 st.set_page_config(page_title="European Power Market Brief", layout="wide")
 st.title("⚡ European Day-Ahead Power Market Brief")
@@ -15,7 +18,18 @@ st.caption("Demo build — currently running on synthetic data pending ENTSO-E A
 # ============ PANEL 1: FORECAST ============
 st.header("📈 Next-Day Price Forecast")
 
-df = pd.read_parquet("synthetic_price_data.parquet")
+import boto3
+import io
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
+bucket = os.getenv("AWS_BUCKET_NAME")
+
+obj = s3.get_object(Bucket=bucket, Key="data/synthetic_price_data.parquet")
+df = pd.read_parquet(io.BytesIO(obj["Body"].read()))
 df = df.sort_values("datetime").reset_index(drop=True)
 df["lag_1h"] = df["price_eur_mwh"].shift(1)
 df["lag_24h"] = df["price_eur_mwh"].shift(24)
@@ -44,7 +58,7 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(x=test["datetime"], y=test["price_eur_mwh"], name="Actual", line=dict(color="#1f77b4")))
 fig.add_trace(go.Scatter(x=test["datetime"], y=test["predicted_price"], name="Predicted", line=dict(color="#ff7f0e")))
 fig.update_layout(xaxis_title="Date", yaxis_title="Price (EUR/MWh)", height=400)
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width='stretch')
 
 # ============ PANEL 2: NEWS SIGNALS ============
 st.header("📰 Today's Market Signals")
@@ -72,6 +86,6 @@ c3.metric("Max Drawdown", f"€{max_dd:.2f}")
 fig2 = go.Figure()
 fig2.add_trace(go.Scatter(x=backtest_df["date"], y=cumulative, name="Cumulative PnL", line=dict(color="#2ca02c")))
 fig2.update_layout(xaxis_title="Date", yaxis_title="Cumulative PnL (EUR/MWh)", height=300)
-st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, width='stretch')
 
 st.caption("⚠️ Illustrative backtest only — not investment advice. Currently on synthetic data.")
